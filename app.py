@@ -56,17 +56,21 @@ def download_video_task(url, format_choice, download_id):
             'error': None
         }
         
-        # Progress hook
+        # Progress hook with filename tracking
+        downloaded_filename = None
+        
         def progress_hook(d):
+            nonlocal downloaded_filename
+            
             if d['status'] == 'downloading':
                 downloaded = d.get('downloaded_bytes', 0)
                 total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-                
+
                 if total and total > 0:
                     percent = min((downloaded / total) * 100, 100)
                     downloaded_mb = downloaded // (1024 * 1024)
                     total_mb = total // (1024 * 1024)
-                    
+
                     download_progress[download_id].update({
                         'status': 'downloading',
                         'progress': percent,
@@ -79,12 +83,17 @@ def download_video_task(url, format_choice, download_id):
                         'progress': 0,
                         'message': f'Downloading: {downloaded_mb}MB downloaded...'
                     })
-                    
+
             elif d['status'] == 'finished':
+                # Track the downloaded filename
+                if 'filename' in d:
+                    downloaded_filename = os.path.basename(d['filename'])
+                    print(f"📁 Downloaded file: {downloaded_filename}")
+                
                 download_progress[download_id].update({
                     'status': 'finished',
                     'progress': 100,
-                    'message': 'Download complete!'
+                    'message': f'Download complete! File: {downloaded_filename or "processing..."}'
                 })
 
         # Prepare yt-dlp options with bot detection bypass and SSL fixes
@@ -338,28 +347,57 @@ def download_video_task(url, format_choice, download_id):
                     # Different error, don't retry
                     raise e
 
-        # Find downloaded file
+        # Find downloaded file with improved discovery
         files = os.listdir(DOWNLOADS_DIR)
         downloaded_file = None
+        downloaded_files = []
+        
+        # Get all recently modified files (downloaded in last 5 minutes)
+        current_time = time.time()
         for file in files:
-            if file.endswith(('.mp4', '.mp3', '.webm', '.mkv')):
-                downloaded_file = file
-                break
-
+            file_path = os.path.join(DOWNLOADS_DIR, file)
+            if os.path.isfile(file_path):
+                file_mtime = os.path.getmtime(file_path)
+                # Check if file was modified in last 5 minutes and has video/audio extension
+                if (current_time - file_mtime) < 300 and file.endswith(('.mp4', '.mp3', '.webm', '.mkv', '.avi', '.mov', '.flv', '.m4a', '.aac', '.ogg')):
+                    downloaded_files.append((file, file_mtime))
+        
+        # Sort by modification time (newest first)
+        downloaded_files.sort(key=lambda x: x[1], reverse=True)
+        
+        # First try to use the tracked filename from progress hook
+        if downloaded_filename and os.path.exists(os.path.join(DOWNLOADS_DIR, downloaded_filename)):
+            downloaded_file = downloaded_filename
+            file_path = os.path.join(DOWNLOADS_DIR, downloaded_file)
+            print(f"✅ Found tracked file: {downloaded_file}")
+        elif downloaded_files:
+            # Use the most recently downloaded file
+            downloaded_file = downloaded_files[0][0]
+            file_path = os.path.join(DOWNLOADS_DIR, downloaded_file)
+            print(f"✅ Found recent file: {downloaded_file}")
+        else:
+            downloaded_file = None
+        
         if downloaded_file:
             download_progress[download_id].update({
                 'status': 'completed',
                 'progress': 100,
-                'message': 'Download completed successfully!',
+                'message': f'Download completed successfully! File: {downloaded_file}',
                 'filename': downloaded_file,
-                'filepath': os.path.join(DOWNLOADS_DIR, downloaded_file)
+                'filepath': file_path
             })
             
-            # Add to history
+            # Add to history with proper title
+            try:
+                # Try to get video title from info if available
+                video_title = info.get('title', downloaded_file) if 'info' in locals() else downloaded_file
+            except:
+                video_title = downloaded_file
+                
             history_entry = {
                 'id': download_id,
                 'url': url,
-                'title': downloaded_file,
+                'title': video_title,
                 'format': format_choice,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'filename': downloaded_file
@@ -367,10 +405,43 @@ def download_video_task(url, format_choice, download_id):
             download_history.append(history_entry)
             save_history()
         else:
-            download_progress[download_id].update({
-                'status': 'error',
-                'message': 'Download completed but file not found'
-            })
+            # If no recent files found, try alternative discovery methods
+            print(f"🔍 Debug: No recent files found in {DOWNLOADS_DIR}")
+            print(f"🔍 Debug: All files in directory: {files}")
+            
+            # Try to find any video/audio file
+            for file in files:
+                if file.endswith(('.mp4', '.mp3', '.webm', '.mkv', '.avi', '.mov', '.flv', '.m4a', '.aac', '.ogg')):
+                    downloaded_file = file
+                    file_path = os.path.join(DOWNLOADS_DIR, downloaded_file)
+                    break
+            
+            if downloaded_file:
+                download_progress[download_id].update({
+                    'status': 'completed',
+                    'progress': 100,
+                    'message': f'Download completed! Found existing file: {downloaded_file}',
+                    'filename': downloaded_file,
+                    'filepath': file_path
+                })
+                
+                # Add to history
+                history_entry = {
+                    'id': download_id,
+                    'url': url,
+                    'title': downloaded_file,
+                    'format': format_choice,
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'filename': downloaded_file
+                }
+                download_history.append(history_entry)
+                save_history()
+            else:
+                download_progress[download_id].update({
+                    'status': 'error',
+                    'message': f'Download completed but no video/audio file found in {DOWNLOADS_DIR}',
+                    'error': f'Available files: {files}'
+                })
 
     except Exception as e:
         download_progress[download_id].update({
