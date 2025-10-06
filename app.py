@@ -90,14 +90,16 @@ def download_video_task(url, format_choice, download_id):
         import random
         import time
         
-        # Random user agents to avoid detection
+        # Random user agents to avoid detection (updated with latest versions)
         user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 OPR/107.0.0.0'
         ]
         
         ydl_opts = {
@@ -155,10 +157,92 @@ def download_video_task(url, format_choice, download_id):
             'http_chunk_size': 10485760,  # 10MB chunks
             'fragment_retries': 5,
             'retry_sleep_functions': {'http': lambda n: min(4 ** n, 120)},
-            # Bot detection bypass
-            'cookiesfrombrowser': ('chrome',),  # Try to use Chrome cookies
-            'sleep_interval_requests': random.uniform(2, 5)
+            # Additional cloud-optimized settings
+            'sleep_interval_requests': random.uniform(2, 5),
+            'sleep_interval_subtitles': random.uniform(1, 3),
+            'max_sleep_interval': 10,
         }
+        
+        # Cloud-optimized bot detection bypass
+        import os
+        is_cloud = os.environ.get('RENDER', False) or os.environ.get('HEROKU', False) or os.environ.get('RAILWAY', False)
+        
+        if is_cloud:
+            # Cloud-specific configuration (no browser cookies)
+            print("🌐 Cloud environment detected - using cloud-optimized settings")
+            ydl_opts.update({
+                'sleep_interval': random.uniform(5, 10),
+                'sleep_interval_requests': random.uniform(8, 15),
+                'max_sleep_interval': 20,
+                'extractor_retries': 15,
+                'fragment_retries': 15,
+                'retries': 15,
+                'file_access_retries': 15,
+            })
+            # Remove cookie dependency for cloud
+            ydl_opts.pop('cookiesfrombrowser', None)
+        else:
+            # Local development - try to use Chrome cookies
+            try:
+                ydl_opts['cookiesfrombrowser'] = ('chrome',)
+                print("🏠 Local environment - using Chrome cookies")
+            except:
+                print("🏠 Local environment - Chrome cookies not available")
+                pass
+        
+        # Enhanced YouTube API configuration for cloud with advanced bot bypass
+        ydl_opts['extractor_args'] = {
+            'youtube': {
+                'skip': ['dash', 'hls'],
+                'player_skip': ['configs'],
+                'innertube_api_key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
+                'innertube_client_version': '2.20231219.01.00',
+                'innertube_context': {
+                    'client': {
+                        'clientName': 'WEB',
+                        'clientVersion': '2.20231219.01.00',
+                        'originalUrl': 'https://www.youtube.com/',
+                        'platform': 'DESKTOP',
+                        'clientFormFactor': 'UNKNOWN_FORM_FACTOR',
+                    }
+                },
+                # Advanced bot detection bypass
+                'player_client': 'web',
+                'player_skip': ['configs', 'webpage'],
+                'comment_sort': 'top',
+                'max_comments': [0, 20, 50, 100],
+                'api_key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
+                'context': {
+                    'client': {
+                        'clientName': 'WEB',
+                        'clientVersion': '2.20231219.01.00',
+                        'originalUrl': 'https://www.youtube.com/',
+                        'platform': 'DESKTOP',
+                        'clientFormFactor': 'UNKNOWN_FORM_FACTOR',
+                    }
+                }
+            }
+        }
+        
+        # Additional bot detection bypass techniques
+        ydl_opts.update({
+            'writeinfojson': False,
+            'writethumbnail': False,
+            'writeautomaticsub': False,
+            'writesubtitles': False,
+            'writeannotations': False,
+            'ignoreerrors': True,
+            'no_check_certificate': True,
+            'prefer_insecure': True,
+            'extractor_retries': 10,
+            'fragment_retries': 10,
+            'retries': 10,
+            'file_access_retries': 10,
+            'sleep_interval': random.uniform(3, 6),
+            'max_sleep_interval': 15,
+            'sleep_interval_requests': random.uniform(3, 7),
+            'sleep_interval_subtitles': random.uniform(2, 5),
+        })
 
         if format_choice == "MP3":
             ydl_opts['format'] = 'bestaudio/best'
@@ -193,39 +277,68 @@ def download_video_task(url, format_choice, download_id):
         elif 'twitch.tv' in url_lower:
             ydl_opts['extractor_args']['twitch'] = {'vod_id': True}
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        # Multi-step bot detection bypass
+        max_attempts = 3
+        for attempt in range(max_attempts):
             try:
-                # Get video info first
-                info = ydl.extract_info(url, download=False)
-                if info:
-                    title = info.get('title', 'Unknown')
-                    duration = info.get('duration', 0)
-                    duration_str = f"{duration // 60}:{duration % 60:02d}" if duration > 0 else "Unknown"
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    try:
+                        # Get video info first
+                        info = ydl.extract_info(url, download=False)
+                        if info:
+                            title = info.get('title', 'Unknown')
+                            duration = info.get('duration', 0)
+                            duration_str = f"{duration // 60}:{duration % 60:02d}" if duration > 0 else "Unknown"
+                            download_progress[download_id].update({
+                                'status': 'downloading',
+                                'message': f"Found: {title[:50]}... ({duration_str})"
+                            })
+                    except:
+                        download_progress[download_id].update({
+                            'status': 'downloading',
+                            'message': f'Attempt {attempt + 1}: Video info extracted, starting download...'
+                        })
+                    
+                    try:
+                        download_progress[download_id].update({
+                            'status': 'downloading',
+                            'message': f'Attempt {attempt + 1}: Starting download...'
+                        })
+                    except:
+                        pass
+                    
+                    # Download
                     download_progress[download_id].update({
                         'status': 'downloading',
-                        'message': f"Found: {title[:50]}... ({duration_str})"
+                        'message': f'Attempt {attempt + 1}: Downloading...'
                     })
-            except:
-                download_progress[download_id].update({
-                    'status': 'downloading',
-                    'message': 'Video info extracted, starting download...'
-                })
-            
-            try:
-                download_progress[download_id].update({
-                    'status': 'downloading',
-                    'message': 'Starting download...'
-                })
-            except:
-                pass
-            
-            # Download
-            download_progress[download_id].update({
-                'status': 'downloading',
-                'message': 'Starting download...'
-            })
-            
-            ydl.download([url])
+                    
+                    ydl.download([url])
+                    break  # Success, exit the retry loop
+                    
+            except Exception as e:
+                error_msg = str(e)
+                if "Sign in to confirm you're not a bot" in error_msg or "bot" in error_msg.lower():
+                    if attempt < max_attempts - 1:
+                        # Wait longer and try different approach
+                        wait_time = random.uniform(5, 10) * (attempt + 1)
+                        download_progress[download_id].update({
+                            'status': 'downloading',
+                            'message': f'Bot detected, waiting {int(wait_time)}s before retry {attempt + 2}...'
+                        })
+                        time.sleep(wait_time)
+                        
+                        # Modify options for next attempt
+                        ydl_opts['sleep_interval'] = random.uniform(5, 10)
+                        ydl_opts['sleep_interval_requests'] = random.uniform(5, 10)
+                        ydl_opts['http_headers']['User-Agent'] = random.choice(user_agents)
+                        continue
+                    else:
+                        # Final attempt failed
+                        raise e
+                else:
+                    # Different error, don't retry
+                    raise e
 
         # Find downloaded file
         files = os.listdir(DOWNLOADS_DIR)
@@ -329,14 +442,16 @@ def get_video_info():
     try:
         import random
         
-        # Random user agents to avoid detection
+        # Random user agents to avoid detection (updated with latest versions)
         user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 OPR/107.0.0.0'
         ]
         
         ydl_opts = {
@@ -380,14 +495,70 @@ def get_video_info():
             'retries': 5,
             'fragment_retries': 5,
             'extractor_retries': 5,
-            # Bot detection bypass
-            'cookiesfrombrowser': ('chrome',),  # Try to use Chrome cookies
             'sleep_interval': random.uniform(1, 3),
             'sleep_interval_requests': random.uniform(2, 5),
         }
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        # Cloud-optimized bot detection bypass for video info
+        import os
+        is_cloud = os.environ.get('RENDER', False) or os.environ.get('HEROKU', False) or os.environ.get('RAILWAY', False)
+        
+        if is_cloud:
+            # Cloud-specific configuration (no browser cookies)
+            print("🌐 Cloud environment detected - using cloud-optimized settings for video info")
+            ydl_opts.update({
+                'extractor_retries': 15,
+                'fragment_retries': 15,
+                'retries': 15,
+                'sleep_interval': random.uniform(5, 10),
+                'sleep_interval_requests': random.uniform(8, 15),
+                'max_sleep_interval': 20,
+            })
+            # Remove cookie dependency for cloud
+            ydl_opts.pop('cookiesfrombrowser', None)
+        else:
+            # Local development - try to use Chrome cookies
+            try:
+                ydl_opts['cookiesfrombrowser'] = ('chrome',)
+                print("🏠 Local environment - using Chrome cookies for video info")
+            except:
+                print("🏠 Local environment - Chrome cookies not available for video info")
+                pass
+            # Enhanced bot detection bypass for video info
+            ydl_opts.update({
+                'extractor_retries': 10,
+                'fragment_retries': 10,
+                'retries': 10,
+                'sleep_interval': random.uniform(3, 6),
+                'sleep_interval_requests': random.uniform(3, 7),
+                'max_sleep_interval': 15,
+            })
+        
+        # Multi-attempt approach for video info
+        max_attempts = 3
+        info = None
+        for attempt in range(max_attempts):
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    break  # Success
+            except Exception as e:
+                error_msg = str(e)
+                if "Sign in to confirm you're not a bot" in error_msg or "bot" in error_msg.lower():
+                    if attempt < max_attempts - 1:
+                        # Wait and retry with different settings
+                        wait_time = random.uniform(3, 7) * (attempt + 1)
+                        time.sleep(wait_time)
+                        ydl_opts['sleep_interval'] = random.uniform(5, 10)
+                        ydl_opts['http_headers']['User-Agent'] = random.choice(user_agents)
+                        continue
+                    else:
+                        raise e
+                else:
+                    raise e
+        
+        if not info:
+            raise Exception("Failed to extract video information after multiple attempts")
 
         formats = []
         if 'formats' in info:
