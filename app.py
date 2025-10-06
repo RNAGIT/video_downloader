@@ -10,6 +10,7 @@ import json
 import threading
 import time
 import uuid
+import random
 from datetime import datetime
 
 app = Flask(__name__)
@@ -87,8 +88,6 @@ def download_video_task(url, format_choice, download_id):
                 })
 
         # Prepare yt-dlp options with bot detection bypass and SSL fixes
-        import random
-        import time
         
         # Random user agents to avoid detection (updated with latest versions)
         user_agents = [
@@ -164,7 +163,6 @@ def download_video_task(url, format_choice, download_id):
         }
         
         # Cloud-optimized bot detection bypass
-        import os
         is_cloud = os.environ.get('RENDER', False) or os.environ.get('HEROKU', False) or os.environ.get('RAILWAY', False)
         
         if is_cloud:
@@ -440,7 +438,6 @@ def get_video_info():
         return jsonify({'error': 'URL is required'}), 400
 
     try:
-        import random
         
         # Random user agents to avoid detection (updated with latest versions)
         user_agents = [
@@ -500,7 +497,6 @@ def get_video_info():
         }
         
         # Cloud-optimized bot detection bypass for video info
-        import os
         is_cloud = os.environ.get('RENDER', False) or os.environ.get('HEROKU', False) or os.environ.get('RAILWAY', False)
         
         if is_cloud:
