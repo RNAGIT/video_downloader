@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🎥 Universal Social Media Video Downloader
 
 A powerful web-based video downloader that supports 1000+ social media platforms with age restriction bypass and beautiful responsive interface.
@@ -177,3 +178,6 @@ If you encounter any issues:
 **Made with ❤️ for the community**
 
 ⭐ **Star this repository if you find it helpful!**
+=======
+# video_downloader
+>>>>>>> a69e9bb4cc3abea2e0bae1cbffc1327df7f59165
