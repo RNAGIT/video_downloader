@@ -86,7 +86,7 @@ def download_video_task(url, format_choice, download_id):
                     'message': 'Download complete!'
                 })
 
-        # Prepare yt-dlp options with age restriction bypass
+        # Prepare yt-dlp options with age restriction bypass and SSL fixes
         ydl_opts = {
             'outtmpl': os.path.join(DOWNLOADS_DIR, '%(title)s.%(ext)s'),
             'progress_hooks': [progress_hook],
@@ -114,6 +114,16 @@ def download_video_task(url, format_choice, download_id):
             'no_color': True,
             'quiet': True,
             'no_warnings': True,
+            # SSL and certificate fixes for cloud deployment
+            'nocheckcertificate': True,
+            'prefer_insecure': True,
+            'legacy_server_connect': True,
+            'source_address': '0.0.0.0',
+            'socket_timeout': 30,
+            'connect_timeout': 30,
+            'http_chunk_size': 10485760,  # 10MB chunks
+            'fragment_retries': 5,
+            'retry_sleep_functions': {'http': lambda n: min(4 ** n, 60)},
         }
 
         if format_choice == "MP3":
@@ -296,7 +306,16 @@ def get_video_info():
             },
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
+            },
+            # SSL and certificate fixes for cloud deployment
+            'nocheckcertificate': True,
+            'prefer_insecure': True,
+            'legacy_server_connect': True,
+            'socket_timeout': 30,
+            'connect_timeout': 30,
+            'retries': 3,
+            'fragment_retries': 3,
+            'extractor_retries': 3,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
