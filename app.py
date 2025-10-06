@@ -86,7 +86,20 @@ def download_video_task(url, format_choice, download_id):
                     'message': 'Download complete!'
                 })
 
-        # Prepare yt-dlp options with age restriction bypass and SSL fixes
+        # Prepare yt-dlp options with bot detection bypass and SSL fixes
+        import random
+        import time
+        
+        # Random user agents to avoid detection
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+        
         ydl_opts = {
             'outtmpl': os.path.join(DOWNLOADS_DIR, '%(title)s.%(ext)s'),
             'progress_hooks': [progress_hook],
@@ -100,17 +113,35 @@ def download_video_task(url, format_choice, download_id):
                 'youtube': {
                     'skip': ['dash', 'hls'],
                     'player_skip': ['configs'],
+                    'innertube_api_key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
+                    'innertube_client_version': '2.20231219.01.00',
+                    'innertube_context': {
+                        'client': {
+                            'clientName': 'WEB',
+                            'clientVersion': '2.20231219.01.00',
+                        }
+                    }
                 }
             },
-            'sleep_interval': 1,
-            'max_sleep_interval': 5,
-            'sleep_interval_subtitles': 1,
+            'sleep_interval': random.uniform(1, 3),
+            'max_sleep_interval': 8,
+            'sleep_interval_subtitles': random.uniform(1, 2),
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'User-Agent': random.choice(user_agents),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Cache-Control': 'max-age=0',
             },
-            'extractor_retries': 3,
-            'fragment_retries': 3,
-            'retries': 3,
+            'extractor_retries': 5,
+            'fragment_retries': 5,
+            'retries': 5,
             'no_color': True,
             'quiet': True,
             'no_warnings': True,
@@ -119,11 +150,14 @@ def download_video_task(url, format_choice, download_id):
             'prefer_insecure': True,
             'legacy_server_connect': True,
             'source_address': '0.0.0.0',
-            'socket_timeout': 30,
-            'connect_timeout': 30,
+            'socket_timeout': 60,
+            'connect_timeout': 60,
             'http_chunk_size': 10485760,  # 10MB chunks
             'fragment_retries': 5,
-            'retry_sleep_functions': {'http': lambda n: min(4 ** n, 60)},
+            'retry_sleep_functions': {'http': lambda n: min(4 ** n, 120)},
+            # Bot detection bypass
+            'cookiesfrombrowser': ('chrome',),  # Try to use Chrome cookies
+            'sleep_interval_requests': random.uniform(2, 5)
         }
 
         if format_choice == "MP3":
@@ -293,6 +327,18 @@ def get_video_info():
         return jsonify({'error': 'URL is required'}), 400
 
     try:
+        import random
+        
+        # Random user agents to avoid detection
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+        
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -302,20 +348,42 @@ def get_video_info():
                 'youtube': {
                     'skip': ['dash', 'hls'],
                     'player_skip': ['configs'],
+                    'innertube_api_key': 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
+                    'innertube_client_version': '2.20231219.01.00',
+                    'innertube_context': {
+                        'client': {
+                            'clientName': 'WEB',
+                            'clientVersion': '2.20231219.01.00',
+                        }
+                    }
                 }
             },
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'User-Agent': random.choice(user_agents),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Cache-Control': 'max-age=0',
             },
             # SSL and certificate fixes for cloud deployment
             'nocheckcertificate': True,
             'prefer_insecure': True,
             'legacy_server_connect': True,
-            'socket_timeout': 30,
-            'connect_timeout': 30,
-            'retries': 3,
-            'fragment_retries': 3,
-            'extractor_retries': 3,
+            'socket_timeout': 60,
+            'connect_timeout': 60,
+            'retries': 5,
+            'fragment_retries': 5,
+            'extractor_retries': 5,
+            # Bot detection bypass
+            'cookiesfrombrowser': ('chrome',),  # Try to use Chrome cookies
+            'sleep_interval': random.uniform(1, 3),
+            'sleep_interval_requests': random.uniform(2, 5),
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
