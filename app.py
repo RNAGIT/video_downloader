@@ -11,7 +11,27 @@ import threading
 import time
 import uuid
 import random
+import logging
+import shutil
 from datetime import datetime
+
+# Check if aria2c is available for faster downloads
+ARIA2C_AVAILABLE = shutil.which('aria2c') is not None
+
+# Custom logger to suppress cookie errors
+class CookieErrorFilter(logging.Filter):
+    def filter(self, record):
+        # Suppress Chrome cookie database errors
+        if 'Could not copy Chrome cookie database' in record.getMessage():
+            return False
+        if 'cookie database' in record.getMessage().lower():
+            return False
+        return True
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+for handler in logging.root.handlers:
+    handler.addFilter(CookieErrorFilter())
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this'
@@ -20,10 +40,13 @@ app.secret_key = 'your-secret-key-change-this'
 download_progress = {}
 download_history = []
 
-# Create downloads directory
-DOWNLOADS_DIR = "downloads"
+# Create downloads directory with absolute path for cloud deployment
+DOWNLOADS_DIR = os.path.abspath("downloads")
 if not os.path.exists(DOWNLOADS_DIR):
-    os.makedirs(DOWNLOADS_DIR)
+    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+    print(f"✅ Created downloads directory: {DOWNLOADS_DIR}")
+else:
+    print(f"📁 Downloads directory exists: {DOWNLOADS_DIR}")
 
 # History file
 HISTORY_FILE = "download_history.json"
@@ -119,6 +142,8 @@ def download_video_task(url, format_choice, download_id):
             'restrictfilenames': True,
             'noplaylist': True,
             'age_limit': None,
+            'ignoreerrors': False,  # Don't ignore download errors, but ignore cookie errors
+            'extract_flat': False,
             'extractor_args': {
                 'youtube': {
                     'skip': ['dash', 'hls'],
@@ -165,6 +190,25 @@ def download_video_task(url, format_choice, download_id):
             'http_chunk_size': 10485760,  # 10MB chunks
             'fragment_retries': 5,
             'retry_sleep_functions': {'http': lambda n: min(4 ** n, 120)},
+            # Speed optimization settings
+            'concurrent_fragment_downloads': 16,  # Download 16 fragments simultaneously
+            'buffersize': 1024 * 1024 * 2,  # 2MB buffer
+            'ratelimit': None,  # No rate limit
+            'throttledratelimit': None,  # No throttled rate limit
+            # External downloader for faster speeds (if aria2c is installed)
+            'external_downloader': 'aria2c' if ARIA2C_AVAILABLE else None,
+            'external_downloader_args': {
+                'aria2c': [
+                    '--max-connection-per-server=16',
+                    '--split=16',
+                    '--min-split-size=1M',
+                    '--max-concurrent-downloads=16',
+                    '--continue=true',
+                    '--max-overall-download-limit=0',
+                    '--max-download-limit=0',
+                    '--file-allocation=none',
+                ]
+            } if ARIA2C_AVAILABLE else {},
             # Additional cloud-optimized settings
             'sleep_interval_requests': random.uniform(2, 5),
             'sleep_interval_subtitles': random.uniform(1, 3),
@@ -189,13 +233,10 @@ def download_video_task(url, format_choice, download_id):
             # Remove cookie dependency for cloud
             ydl_opts.pop('cookiesfrombrowser', None)
         else:
-            # Local development - try to use Chrome cookies
-            try:
-                ydl_opts['cookiesfrombrowser'] = ('chrome',)
-                print("🏠 Local environment - using Chrome cookies")
-            except:
-                print("🏠 Local environment - Chrome cookies not available")
-                pass
+            # Local development - Chrome cookies are optional
+            # Note: Chrome cookies often fail if Chrome is running (database locked)
+            # The downloader works fine without them for most videos
+            print("🏠 Local environment - Chrome cookies disabled (works without them)")
         
         # Enhanced YouTube API configuration for cloud with advanced bot bypass
         ydl_opts['extractor_args'] = {
@@ -379,31 +420,44 @@ def download_video_task(url, format_choice, download_id):
             downloaded_file = None
         
         if downloaded_file:
-            download_progress[download_id].update({
-                'status': 'completed',
-                'progress': 100,
-                'message': f'Download completed successfully! File: {downloaded_file}',
-                'filename': downloaded_file,
-                'filepath': file_path
-            })
+            # Double-check file exists and get its size
+            file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+            file_size_mb = file_size / (1024 * 1024)
             
-            # Add to history with proper title
-            try:
-                # Try to get video title from info if available
-                video_title = info.get('title', downloaded_file) if 'info' in locals() else downloaded_file
-            except:
-                video_title = downloaded_file
+            if file_size > 0:
+                download_progress[download_id].update({
+                    'status': 'completed',
+                    'progress': 100,
+                    'message': f'Download completed successfully! File: {downloaded_file} ({file_size_mb:.2f} MB)',
+                    'filename': downloaded_file,
+                    'filepath': file_path
+                })
                 
-            history_entry = {
-                'id': download_id,
-                'url': url,
-                'title': video_title,
-                'format': format_choice,
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'filename': downloaded_file
-            }
-            download_history.append(history_entry)
-            save_history()
+                # Add to history with proper title
+                try:
+                    # Try to get video title from info if available
+                    video_title = info.get('title', downloaded_file) if 'info' in locals() else downloaded_file
+                except:
+                    video_title = downloaded_file
+                    
+                history_entry = {
+                    'id': download_id,
+                    'url': url,
+                    'title': video_title,
+                    'format': format_choice,
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'filename': downloaded_file
+                }
+                download_history.append(history_entry)
+                save_history()
+                print(f"✅ Download completed: {downloaded_file} ({file_size_mb:.2f} MB)")
+            else:
+                download_progress[download_id].update({
+                    'status': 'error',
+                    'message': f'Download completed but file is empty or corrupted: {downloaded_file}',
+                    'error': 'File size is 0 bytes'
+                })
+                print(f"❌ Downloaded file is empty: {downloaded_file}")
         else:
             # If no recent files found, try alternative discovery methods
             print(f"🔍 Debug: No recent files found in {DOWNLOADS_DIR}")
@@ -417,25 +471,36 @@ def download_video_task(url, format_choice, download_id):
                     break
             
             if downloaded_file:
-                download_progress[download_id].update({
-                    'status': 'completed',
-                    'progress': 100,
-                    'message': f'Download completed! Found existing file: {downloaded_file}',
-                    'filename': downloaded_file,
-                    'filepath': file_path
-                })
+                # Check file size
+                file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                file_size_mb = file_size / (1024 * 1024)
                 
-                # Add to history
-                history_entry = {
-                    'id': download_id,
-                    'url': url,
-                    'title': downloaded_file,
-                    'format': format_choice,
-                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'filename': downloaded_file
-                }
-                download_history.append(history_entry)
-                save_history()
+                if file_size > 0:
+                    download_progress[download_id].update({
+                        'status': 'completed',
+                        'progress': 100,
+                        'message': f'Download completed! Found existing file: {downloaded_file} ({file_size_mb:.2f} MB)',
+                        'filename': downloaded_file,
+                        'filepath': file_path
+                    })
+                    
+                    # Add to history
+                    history_entry = {
+                        'id': download_id,
+                        'url': url,
+                        'title': downloaded_file,
+                        'format': format_choice,
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'filename': downloaded_file
+                    }
+                    download_history.append(history_entry)
+                    save_history()
+                else:
+                    download_progress[download_id].update({
+                        'status': 'error',
+                        'message': f'Found file but it is empty or corrupted: {downloaded_file}',
+                        'error': 'File size is 0 bytes'
+                    })
             else:
                 download_progress[download_id].update({
                     'status': 'error',
@@ -454,6 +519,19 @@ def download_video_task(url, format_choice, download_id):
 def index():
     load_history()
     return render_template('index.html')
+
+@app.route('/favicon.ico')
+def favicon():
+    """Return empty response for favicon to prevent 404 errors"""
+    from flask import make_response
+    response = make_response('')
+    response.headers['Content-Type'] = 'image/x-icon'
+    return response
+
+@app.route('/.well-known/appspecific/com.chrome.devtools.json')
+def chrome_devtools():
+    """Return empty response for Chrome DevTools request"""
+    return jsonify({})
 
 @app.route('/download', methods=['POST'])
 def start_download():
@@ -483,11 +561,62 @@ def get_progress(download_id):
 
 @app.route('/download_file/<filename>')
 def download_file(filename):
-    file_path = os.path.join(DOWNLOADS_DIR, filename)
-    if os.path.exists(file_path):
-        return send_file(file_path, as_attachment=True)
-    else:
-        return jsonify({'error': 'File not found'}), 404
+    try:
+        # Security: prevent directory traversal attacks
+        filename = os.path.basename(filename)
+        
+        # Construct absolute path
+        file_path = os.path.join(DOWNLOADS_DIR, filename)
+        abs_file_path = os.path.abspath(file_path)
+        
+        # Debug logging for deployment
+        print(f"🔍 Download request for: {filename}")
+        print(f"📁 Looking in directory: {DOWNLOADS_DIR}")
+        print(f"📂 Full path: {abs_file_path}")
+        print(f"✅ File exists: {os.path.exists(abs_file_path)}")
+        
+        # List all files in downloads directory for debugging
+        if os.path.exists(DOWNLOADS_DIR):
+            all_files = os.listdir(DOWNLOADS_DIR)
+            print(f"📋 Files in downloads dir: {all_files}")
+        else:
+            print(f"❌ Downloads directory doesn't exist: {DOWNLOADS_DIR}")
+            os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+            print(f"✅ Created downloads directory")
+        
+        if os.path.exists(abs_file_path) and os.path.isfile(abs_file_path):
+            # Determine MIME type based on extension
+            mime_type = 'application/octet-stream'
+            if filename.endswith('.mp4'):
+                mime_type = 'video/mp4'
+            elif filename.endswith('.mp3'):
+                mime_type = 'audio/mpeg'
+            elif filename.endswith('.webm'):
+                mime_type = 'video/webm'
+            elif filename.endswith('.mkv'):
+                mime_type = 'video/x-matroska'
+            
+            print(f"✅ Sending file: {filename} ({mime_type})")
+            
+            # Send file with proper headers for auto-download
+            return send_file(
+                abs_file_path,
+                as_attachment=True,
+                download_name=filename,
+                mimetype=mime_type
+            )
+        else:
+            print(f"❌ File not found: {abs_file_path}")
+            return jsonify({
+                'error': 'File not found',
+                'filename': filename,
+                'path': abs_file_path,
+                'downloads_dir': DOWNLOADS_DIR,
+                'files_available': os.listdir(DOWNLOADS_DIR) if os.path.exists(DOWNLOADS_DIR) else []
+            }), 404
+    except Exception as e:
+        print(f"❌ Error serving file: {str(e)}")
+        return jsonify({'error': f'Error serving file: {str(e)}'}), 500
 
 @app.route('/history')
 def get_history():
@@ -584,13 +713,8 @@ def get_video_info():
             # Remove cookie dependency for cloud
             ydl_opts.pop('cookiesfrombrowser', None)
         else:
-            # Local development - try to use Chrome cookies
-            try:
-                ydl_opts['cookiesfrombrowser'] = ('chrome',)
-                print("🏠 Local environment - using Chrome cookies for video info")
-            except:
-                print("🏠 Local environment - Chrome cookies not available for video info")
-                pass
+            # Local development - Chrome cookies disabled (works without them)
+            print("🏠 Local environment - Chrome cookies disabled for video info")
             # Enhanced bot detection bypass for video info
             ydl_opts.update({
                 'extractor_retries': 10,
@@ -663,6 +787,13 @@ if __name__ == '__main__':
     print("🚀 Starting Simple Video Downloader...")
     print("📱 Supports: YouTube, TikTok, Instagram, Twitter/X, Facebook, Twitch & More")
     print("🎯 Features: Age restriction bypass, multiple qualities, real-time progress")
+    
+    # Display speed optimization status
+    if ARIA2C_AVAILABLE:
+        print("⚡ Speed Boost: aria2c detected - Ultra-fast downloads enabled (16 connections)")
+    else:
+        print("⚡ Speed Boost: Multi-threaded downloads enabled (16 concurrent fragments)")
+        print("💡 Tip: Install aria2c for even faster downloads (up to 10x speed)")
     
     # Production-ready configuration
     port = int(os.environ.get('PORT', 5000))

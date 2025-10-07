@@ -915,7 +915,7 @@
             createParticles();
             initThemeToggle();
             loadHistory();
-            loadSpeedStats();
+            // loadSpeedStats(); // Endpoint not implemented yet
             
             // Add smooth animations
             const observer = new IntersectionObserver((entries) => {
@@ -1056,15 +1056,41 @@
 
         function showDownloadResult(data) {
             const resultDiv = document.getElementById('downloadResult');
+            
+            // Ensure filename exists
+            if (!data.filename) {
+                showError('Download completed but filename is missing. Please check the history section.');
+                return;
+            }
+            
             resultDiv.innerHTML = `
                 <div class="alert alert-success">
                     <h6><i class="fas fa-check-circle"></i> Download Completed!</h6>
                     <p class="mb-2">File: <strong>${data.filename}</strong></p>
-                    <a href="/download_file/${data.filename}" class="download-link" download>
+                    <a href="/download_file/${encodeURIComponent(data.filename)}" 
+                       class="download-link" 
+                       download="${data.filename}"
+                       onclick="handleDownloadClick(event, '${encodeURIComponent(data.filename)}')">
                         <i class="fas fa-download"></i> Download File
                     </a>
                 </div>
             `;
+        }
+        
+        async function handleDownloadClick(event, filename) {
+            // Let the default download behavior work
+            // But add error handling
+            try {
+                const response = await fetch(`/download_file/${filename}`, { method: 'HEAD' });
+                if (!response.ok) {
+                    event.preventDefault();
+                    const errorData = await fetch(`/download_file/${filename}`).then(r => r.json());
+                    showError(`File not found: ${errorData.error || 'Unknown error'}. Files available: ${errorData.files_available?.join(', ') || 'none'}`);
+                }
+            } catch (error) {
+                console.error('Download check failed:', error);
+                // Let the download attempt continue
+            }
         }
 
         function showError(message) {
@@ -1106,7 +1132,10 @@
                             <strong>${item.title}</strong><br>
                             <small class="text-muted">${item.format} • ${item.timestamp}</small>
                         </div>
-                        <a href="/download_file/${item.filename}" class="download-link" download>
+                        <a href="/download_file/${encodeURIComponent(item.filename)}" 
+                           class="download-link" 
+                           download="${item.filename}"
+                           onclick="handleDownloadClick(event, '${encodeURIComponent(item.filename)}')">
                             <i class="fas fa-download"></i> Download
                         </a>
                     </div>
