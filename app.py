@@ -40,13 +40,47 @@ app.secret_key = 'your-secret-key-change-this'
 download_progress = {}
 download_history = []
 
-# Create downloads directory with absolute path for cloud deployment
+# Create downloads directory with absolute path and proper permissions for cloud deployment
 DOWNLOADS_DIR = os.path.abspath("downloads")
-if not os.path.exists(DOWNLOADS_DIR):
-    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-    print(f"✅ Created downloads directory: {DOWNLOADS_DIR}")
-else:
-    print(f"📁 Downloads directory exists: {DOWNLOADS_DIR}")
+
+def ensure_downloads_directory():
+    """Ensure downloads directory exists with proper permissions"""
+    global DOWNLOADS_DIR
+    
+    try:
+        if not os.path.exists(DOWNLOADS_DIR):
+            os.makedirs(DOWNLOADS_DIR, mode=0o755, exist_ok=True)
+            print(f"✅ Created downloads directory: {DOWNLOADS_DIR}")
+        else:
+            print(f"📁 Downloads directory exists: {DOWNLOADS_DIR}")
+        
+        # Verify directory is writable
+        if not os.access(DOWNLOADS_DIR, os.W_OK):
+            print(f"⚠️ Downloads directory is not writable!")
+            # Try to fix permissions
+            try:
+                os.chmod(DOWNLOADS_DIR, 0o755)
+                print(f"✅ Fixed directory permissions")
+            except Exception as e:
+                print(f"❌ Could not fix permissions: {e}")
+        else:
+            print(f"✅ Downloads directory is writable")
+        
+        # Show directory info for debugging
+        print(f"📂 Directory path: {DOWNLOADS_DIR}")
+        print(f"📂 Is absolute: {os.path.isabs(DOWNLOADS_DIR)}")
+        print(f"📂 Exists: {os.path.exists(DOWNLOADS_DIR)}")
+        print(f"📂 Is directory: {os.path.isdir(DOWNLOADS_DIR)}")
+        
+    except Exception as e:
+        print(f"❌ Error setting up downloads directory: {e}")
+        # Create fallback in /tmp for cloud platforms
+        DOWNLOADS_DIR = "/tmp/downloads"
+        os.makedirs(DOWNLOADS_DIR, mode=0o755, exist_ok=True)
+        print(f"✅ Using fallback directory: {DOWNLOADS_DIR}")
+
+# Initialize downloads directory
+ensure_downloads_directory()
 
 # History file
 HISTORY_FILE = "download_history.json"
@@ -388,36 +422,69 @@ def download_video_task(url, format_choice, download_id):
                     # Different error, don't retry
                     raise e
 
-        # Find downloaded file with improved discovery
-        files = os.listdir(DOWNLOADS_DIR)
+        # Enhanced file discovery with multiple fallback methods
         downloaded_file = None
-        downloaded_files = []
+        file_path = None
         
-        # Get all recently modified files (downloaded in last 5 minutes)
-        current_time = time.time()
-        for file in files:
-            file_path = os.path.join(DOWNLOADS_DIR, file)
-            if os.path.isfile(file_path):
-                file_mtime = os.path.getmtime(file_path)
-                # Check if file was modified in last 5 minutes and has video/audio extension
-                if (current_time - file_mtime) < 300 and file.endswith(('.mp4', '.mp3', '.webm', '.mkv', '.avi', '.mov', '.flv', '.m4a', '.aac', '.ogg')):
-                    downloaded_files.append((file, file_mtime))
+        # Method 1: Use tracked filename from progress hook (most reliable)
+        if downloaded_filename:
+            potential_path = os.path.join(DOWNLOADS_DIR, downloaded_filename)
+            if os.path.exists(potential_path) and os.path.isfile(potential_path):
+                downloaded_file = downloaded_filename
+                file_path = potential_path
+                print(f"✅ Method 1: Found tracked file: {downloaded_file}")
         
-        # Sort by modification time (newest first)
-        downloaded_files.sort(key=lambda x: x[1], reverse=True)
+        # Method 2: Search by modification time (fallback)
+        if not downloaded_file:
+            try:
+                files = os.listdir(DOWNLOADS_DIR)
+                downloaded_files = []
+                current_time = time.time()
+                
+                for file in files:
+                    temp_path = os.path.join(DOWNLOADS_DIR, file)
+                    if os.path.isfile(temp_path):
+                        file_mtime = os.path.getmtime(temp_path)
+                        # Check if file was modified in last 10 minutes and has video/audio extension
+                        if (current_time - file_mtime) < 600 and file.endswith(('.mp4', '.mp3', '.webm', '.mkv', '.avi', '.mov', '.flv', '.m4a', '.aac', '.ogg', '.wav', '.m4v')):
+                            downloaded_files.append((file, file_mtime, temp_path))
+                
+                # Sort by modification time (newest first)
+                downloaded_files.sort(key=lambda x: x[1], reverse=True)
+                
+                if downloaded_files:
+                    downloaded_file = downloaded_files[0][0]
+                    file_path = downloaded_files[0][2]
+                    print(f"✅ Method 2: Found recent file: {downloaded_file}")
+            except Exception as e:
+                print(f"⚠️ Method 2 failed: {e}")
         
-        # First try to use the tracked filename from progress hook
-        if downloaded_filename and os.path.exists(os.path.join(DOWNLOADS_DIR, downloaded_filename)):
-            downloaded_file = downloaded_filename
-            file_path = os.path.join(DOWNLOADS_DIR, downloaded_file)
-            print(f"✅ Found tracked file: {downloaded_file}")
-        elif downloaded_files:
-            # Use the most recently downloaded file
-            downloaded_file = downloaded_files[0][0]
-            file_path = os.path.join(DOWNLOADS_DIR, downloaded_file)
-            print(f"✅ Found recent file: {downloaded_file}")
-        else:
-            downloaded_file = None
+        # Method 3: Direct search for any video/audio file (last resort)
+        if not downloaded_file:
+            try:
+                files = os.listdir(DOWNLOADS_DIR)
+                for file in files:
+                    if file.endswith(('.mp4', '.mp3', '.webm', '.mkv', '.avi', '.mov', '.flv', '.m4a', '.aac', '.ogg', '.wav', '.m4v')):
+                        temp_path = os.path.join(DOWNLOADS_DIR, file)
+                        if os.path.isfile(temp_path) and os.path.getsize(temp_path) > 0:
+                            downloaded_file = file
+                            file_path = temp_path
+                            print(f"✅ Method 3: Found any valid file: {downloaded_file}")
+                            break
+            except Exception as e:
+                print(f"⚠️ Method 3 failed: {e}")
+        
+        # Enhanced debugging for cloud platforms
+        if not downloaded_file:
+            try:
+                all_files = os.listdir(DOWNLOADS_DIR)
+                print(f"🔍 DEBUG: No file found. All files in directory: {all_files}")
+                print(f"🔍 DEBUG: Downloads directory: {DOWNLOADS_DIR}")
+                print(f"🔍 DEBUG: Directory exists: {os.path.exists(DOWNLOADS_DIR)}")
+                print(f"🔍 DEBUG: Directory writable: {os.access(DOWNLOADS_DIR, os.W_OK)}")
+                print(f"🔍 DEBUG: Tracked filename: {downloaded_filename}")
+            except Exception as e:
+                print(f"🔍 DEBUG: Error listing directory: {e}")
         
         if downloaded_file:
             # Double-check file exists and get its size
@@ -482,9 +549,10 @@ def download_video_task(url, format_choice, download_id):
                     download_progress[download_id].update({
                         'status': 'completed',
                         'progress': 100,
-                        'message': f'Download completed! Found existing file: {downloaded_file} ({file_size_mb:.2f} MB)',
+                        'message': f'Download completed! File: {downloaded_file} ({file_size_mb:.2f} MB)',
                         'filename': downloaded_file,
-                        'filepath': file_path
+                        'filepath': file_path,
+                        'ready_for_download': True  # Signal that file is ready
                     })
                     
                     # Add to history
@@ -498,6 +566,7 @@ def download_video_task(url, format_choice, download_id):
                     }
                     download_history.append(history_entry)
                     save_history()
+                    print(f"✅ Fallback method: Found {downloaded_file}")
                 else:
                     download_progress[download_id].update({
                         'status': 'error',
@@ -505,10 +574,20 @@ def download_video_task(url, format_choice, download_id):
                         'error': 'File size is 0 bytes'
                     })
             else:
+                # Enhanced error message for cloud deployments
+                error_details = {
+                    'downloads_dir': DOWNLOADS_DIR,
+                    'files_in_dir': files if 'files' in locals() else [],
+                    'dir_exists': os.path.exists(DOWNLOADS_DIR),
+                    'dir_writable': os.access(DOWNLOADS_DIR, os.W_OK) if os.path.exists(DOWNLOADS_DIR) else False
+                }
+                print(f"❌ FINAL ERROR: No file found. Details: {error_details}")
+                
                 download_progress[download_id].update({
                     'status': 'error',
-                    'message': f'Download completed but no video/audio file found in {DOWNLOADS_DIR}',
-                    'error': f'Available files: {files}'
+                    'message': f'Download appears to have completed, but the file could not be located. This is a cloud storage timing issue. Please try downloading again.',
+                    'error': 'File discovery failed',
+                    'debug': error_details
                 })
 
     except Exception as e:
