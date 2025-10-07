@@ -40,44 +40,49 @@ app.secret_key = 'your-secret-key-change-this'
 download_progress = {}
 download_history = []
 
-# Create downloads directory with absolute path and proper permissions for cloud deployment
-DOWNLOADS_DIR = os.path.abspath("downloads")
+# CRITICAL FIX FOR RENDER: Use /tmp which is GUARANTEED writable
+# Render's main filesystem may have permission issues, /tmp always works
+is_cloud = os.environ.get('RENDER') or os.environ.get('HEROKU') or os.environ.get('RAILWAY')
+
+if is_cloud:
+    # On cloud platforms, use /tmp which is guaranteed writable
+    DOWNLOADS_DIR = "/tmp/youtube_downloader_files"
+    print(f"☁️ Cloud platform detected - using /tmp directory")
+else:
+    # Local development - use relative path
+    DOWNLOADS_DIR = os.path.abspath("downloads")
+    print(f"🏠 Local environment - using ./downloads")
 
 def ensure_downloads_directory():
     """Ensure downloads directory exists with proper permissions"""
     global DOWNLOADS_DIR
     
     try:
-        if not os.path.exists(DOWNLOADS_DIR):
-            os.makedirs(DOWNLOADS_DIR, mode=0o755, exist_ok=True)
-            print(f"✅ Created downloads directory: {DOWNLOADS_DIR}")
-        else:
-            print(f"📁 Downloads directory exists: {DOWNLOADS_DIR}")
+        # Create directory if it doesn't exist
+        os.makedirs(DOWNLOADS_DIR, mode=0o777, exist_ok=True)
         
-        # Verify directory is writable
-        if not os.access(DOWNLOADS_DIR, os.W_OK):
-            print(f"⚠️ Downloads directory is not writable!")
-            # Try to fix permissions
-            try:
-                os.chmod(DOWNLOADS_DIR, 0o755)
-                print(f"✅ Fixed directory permissions")
-            except Exception as e:
-                print(f"❌ Could not fix permissions: {e}")
-        else:
-            print(f"✅ Downloads directory is writable")
+        # Test write access with a temporary file
+        test_file = os.path.join(DOWNLOADS_DIR, '.test_write')
+        try:
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            print(f"✅ Downloads directory is writable: {DOWNLOADS_DIR}")
+        except Exception as e:
+            print(f"❌ Cannot write to {DOWNLOADS_DIR}: {e}")
+            # Force use /tmp as absolute last resort
+            DOWNLOADS_DIR = "/tmp/video_downloads"
+            os.makedirs(DOWNLOADS_DIR, mode=0o777, exist_ok=True)
+            print(f"✅ Using emergency fallback: {DOWNLOADS_DIR}")
         
-        # Show directory info for debugging
-        print(f"📂 Directory path: {DOWNLOADS_DIR}")
-        print(f"📂 Is absolute: {os.path.isabs(DOWNLOADS_DIR)}")
-        print(f"📂 Exists: {os.path.exists(DOWNLOADS_DIR)}")
-        print(f"📂 Is directory: {os.path.isdir(DOWNLOADS_DIR)}")
+        print(f"📂 Final directory: {DOWNLOADS_DIR}")
+        print(f"📂 Writable: {os.access(DOWNLOADS_DIR, os.W_OK)}")
         
     except Exception as e:
-        print(f"❌ Error setting up downloads directory: {e}")
-        # Create fallback in /tmp for cloud platforms
-        DOWNLOADS_DIR = "/tmp/downloads"
-        os.makedirs(DOWNLOADS_DIR, mode=0o755, exist_ok=True)
-        print(f"✅ Using fallback directory: {DOWNLOADS_DIR}")
+        print(f"❌ Fatal error setting up directory: {e}")
+        # Absolute last resort
+        DOWNLOADS_DIR = "/tmp"
+        print(f"⚠️ Using system /tmp: {DOWNLOADS_DIR}")
 
 # Initialize downloads directory
 ensure_downloads_directory()
@@ -169,8 +174,15 @@ def download_video_task(url, format_choice, download_id):
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 OPR/107.0.0.0'
         ]
         
+        # CRITICAL: Show exactly where files will be downloaded
+        output_template = os.path.join(DOWNLOADS_DIR, '%(title)s.%(ext)s')
+        print(f"📥 Download will save to: {output_template}")
+        print(f"📥 DOWNLOADS_DIR: {DOWNLOADS_DIR}")
+        print(f"📥 Directory exists: {os.path.exists(DOWNLOADS_DIR)}")
+        print(f"📥 Directory writable: {os.access(DOWNLOADS_DIR, os.W_OK)}")
+        
         ydl_opts = {
-            'outtmpl': os.path.join(DOWNLOADS_DIR, '%(title)s.%(ext)s'),
+            'outtmpl': output_template,
             'progress_hooks': [progress_hook],
             'postprocessors': [],
             'geo_bypass': True,
