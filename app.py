@@ -398,6 +398,11 @@ def download_video_task(url, format_choice, download_id):
                     })
                     
                     ydl.download([url])
+                    
+                    # CRITICAL: Wait for file to be fully written to disk (cloud platforms need this)
+                    print(f"⏳ Waiting for file system sync...")
+                    time.sleep(2)  # Wait 2 seconds for file to be available
+                    
                     break  # Success, exit the retry loop
                     
             except Exception as e:
@@ -428,37 +433,72 @@ def download_video_task(url, format_choice, download_id):
         downloaded_file = None
         file_path = None
         
-        # Method 1: Use tracked filename from progress hook (FULL PATH)
+        # CRITICAL: Give file system more time to sync (cloud platforms are slower)
+        print(f"⏳ Verifying file availability...")
+        max_wait = 5  # Wait up to 5 seconds
+        wait_increment = 0.5
+        waited = 0
+        
+        # Method 1: Use tracked filename from progress hook (FULL PATH) with retries
         if downloaded_filename:
-            # downloaded_filename is now FULL PATH from progress hook
-            if os.path.exists(downloaded_filename) and os.path.isfile(downloaded_filename):
-                file_path = downloaded_filename
-                downloaded_file = os.path.basename(downloaded_filename)
-                print(f"✅ Method 1: Found tracked file at full path: {file_path}")
-                print(f"✅ Filename: {downloaded_file}")
+            print(f"🔍 Looking for tracked file: {downloaded_filename}")
+            
+            # Retry for up to 5 seconds
+            while waited < max_wait:
+                if os.path.exists(downloaded_filename) and os.path.isfile(downloaded_filename):
+                    file_path = downloaded_filename
+                    downloaded_file = os.path.basename(downloaded_filename)
+                    file_size = os.path.getsize(file_path)
+                    print(f"✅ Method 1: Found tracked file at full path: {file_path}")
+                    print(f"✅ Filename: {downloaded_file}, Size: {file_size} bytes")
+                    break
+                else:
+                    print(f"⏳ File not yet available, waiting... ({waited}s/{max_wait}s)")
+                    time.sleep(wait_increment)
+                    waited += wait_increment
+            
+            if not downloaded_file:
+                print(f"⚠️ Method 1: File still not found after {max_wait}s wait")
+                print(f"⚠️ Path checked: {downloaded_filename}")
+                print(f"⚠️ File exists: {os.path.exists(downloaded_filename)}")
         
         # Method 2: Search by modification time (fallback)
         if not downloaded_file:
+            print(f"🔍 Method 2: Searching downloads directory...")
+            print(f"📁 DOWNLOADS_DIR: {DOWNLOADS_DIR}")
+            
             try:
-                files = os.listdir(DOWNLOADS_DIR)
-                downloaded_files = []
-                current_time = time.time()
-                
-                for file in files:
-                    temp_path = os.path.join(DOWNLOADS_DIR, file)
-                    if os.path.isfile(temp_path):
-                        file_mtime = os.path.getmtime(temp_path)
-                        # Check if file was modified in last 10 minutes and has video/audio extension
-                        if (current_time - file_mtime) < 600 and file.endswith(('.mp4', '.mp3', '.webm', '.mkv', '.avi', '.mov', '.flv', '.m4a', '.aac', '.ogg', '.wav', '.m4v')):
-                            downloaded_files.append((file, file_mtime, temp_path))
-                
-                # Sort by modification time (newest first)
-                downloaded_files.sort(key=lambda x: x[1], reverse=True)
-                
-                if downloaded_files:
-                    downloaded_file = downloaded_files[0][0]
-                    file_path = downloaded_files[0][2]
-                    print(f"✅ Method 2: Found recent file: {downloaded_file}")
+                if os.path.exists(DOWNLOADS_DIR):
+                    files = os.listdir(DOWNLOADS_DIR)
+                    print(f"📋 Total files in directory: {len(files)}")
+                    print(f"📋 Files: {files}")
+                    
+                    downloaded_files = []
+                    current_time = time.time()
+                    
+                    for file in files:
+                        temp_path = os.path.join(DOWNLOADS_DIR, file)
+                        if os.path.isfile(temp_path):
+                            file_mtime = os.path.getmtime(temp_path)
+                            file_size = os.path.getsize(temp_path)
+                            age_seconds = current_time - file_mtime
+                            print(f"   📄 {file}: {file_size} bytes, {age_seconds:.1f}s old")
+                            
+                            # Check if file was modified in last 10 minutes and has video/audio extension
+                            if age_seconds < 600 and file.endswith(('.mp4', '.mp3', '.webm', '.mkv', '.avi', '.mov', '.flv', '.m4a', '.aac', '.ogg', '.wav', '.m4v')):
+                                downloaded_files.append((file, file_mtime, temp_path))
+                    
+                    # Sort by modification time (newest first)
+                    downloaded_files.sort(key=lambda x: x[1], reverse=True)
+                    
+                    if downloaded_files:
+                        downloaded_file = downloaded_files[0][0]
+                        file_path = downloaded_files[0][2]
+                        print(f"✅ Method 2: Found recent file: {downloaded_file}")
+                    else:
+                        print(f"⚠️ Method 2: No recent video/audio files found")
+                else:
+                    print(f"❌ Downloads directory does not exist: {DOWNLOADS_DIR}")
             except Exception as e:
                 print(f"⚠️ Method 2 failed: {e}")
         
