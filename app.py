@@ -142,15 +142,17 @@ def download_video_task(url, format_choice, download_id):
                     })
 
             elif d['status'] == 'finished':
-                # Track the downloaded filename
+                # Track the downloaded filename - GET FULL PATH
                 if 'filename' in d:
-                    downloaded_filename = os.path.basename(d['filename'])
-                    print(f"📁 Downloaded file: {downloaded_filename}")
+                    # Store FULL PATH not just basename
+                    downloaded_filename = d['filename']
+                    print(f"📁 Downloaded file (FULL PATH): {downloaded_filename}")
+                    print(f"📁 File exists check: {os.path.exists(downloaded_filename)}")
                 
                 download_progress[download_id].update({
                     'status': 'finished',
                     'progress': 100,
-                    'message': f'Download complete! File: {downloaded_filename or "processing..."}'
+                    'message': f'Download complete! Preparing file...'
                 })
 
         # Prepare yt-dlp options with bot detection bypass and SSL fixes
@@ -426,13 +428,14 @@ def download_video_task(url, format_choice, download_id):
         downloaded_file = None
         file_path = None
         
-        # Method 1: Use tracked filename from progress hook (most reliable)
+        # Method 1: Use tracked filename from progress hook (FULL PATH)
         if downloaded_filename:
-            potential_path = os.path.join(DOWNLOADS_DIR, downloaded_filename)
-            if os.path.exists(potential_path) and os.path.isfile(potential_path):
-                downloaded_file = downloaded_filename
-                file_path = potential_path
-                print(f"✅ Method 1: Found tracked file: {downloaded_file}")
+            # downloaded_filename is now FULL PATH from progress hook
+            if os.path.exists(downloaded_filename) and os.path.isfile(downloaded_filename):
+                file_path = downloaded_filename
+                downloaded_file = os.path.basename(downloaded_filename)
+                print(f"✅ Method 1: Found tracked file at full path: {file_path}")
+                print(f"✅ Filename: {downloaded_file}")
         
         # Method 2: Search by modification time (fallback)
         if not downloaded_file:
