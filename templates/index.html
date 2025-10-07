@@ -1067,14 +1067,25 @@
                 <div class="alert alert-success">
                     <h6><i class="fas fa-check-circle"></i> Download Completed!</h6>
                     <p class="mb-2">File: <strong>${data.filename}</strong></p>
+                    <p class="mb-3"><small>Click below to save to your device</small></p>
                     <a href="/download_file/${encodeURIComponent(data.filename)}" 
                        class="download-link" 
                        download="${data.filename}"
-                       onclick="handleDownloadClick(event, '${encodeURIComponent(data.filename)}')">
-                        <i class="fas fa-download"></i> Download File
+                       id="autoDownloadLink">
+                        <i class="fas fa-download"></i> Save to Device
                     </a>
                 </div>
             `;
+            
+            // Automatically trigger download after a short delay
+            setTimeout(() => {
+                const downloadLink = document.getElementById('autoDownloadLink');
+                if (downloadLink) {
+                    showNotification('Download ready! Choose location to save on your device.', 'success');
+                    // Auto-click the download link
+                    downloadLink.click();
+                }
+            }, 500);
         }
         
         async function handleDownloadClick(event, filename) {
@@ -1135,8 +1146,8 @@
                         <a href="/download_file/${encodeURIComponent(item.filename)}" 
                            class="download-link" 
                            download="${item.filename}"
-                           onclick="handleDownloadClick(event, '${encodeURIComponent(item.filename)}')">
-                            <i class="fas fa-download"></i> Download
+                           title="Save ${item.filename} to your device">
+                            <i class="fas fa-save"></i> Save to Device
                         </a>
                     </div>
                 `).join('');

@@ -135,7 +135,10 @@ A powerful, fast, and easy-to-use web application for downloading videos from 10
 3. **Select quality** (Best Quality, 4K, 1080p, 720p, MP3)
 4. **Click "Start Download"**
 5. **Wait** for progress to complete
-6. **Download** file to your device
+6. **Browser will prompt "Save As"** - Choose location on your device
+7. **File saves directly to your computer/phone**
+
+> **Note:** Files automatically download to YOUR device using your browser's native "Save As" dialog. This ensures compatibility with all cloud platforms and gives you control over where files are saved.
 
 ### Example URLs
 
@@ -256,10 +259,10 @@ youtube_video_downloader/
 - Close other bandwidth-heavy applications
 
 **"File Not Found" Error**
-- This is deployment-related
-- Files are stored temporarily
-- Download immediately after completion
-- Cloud platforms have ephemeral storage
+- Normal on cloud platforms (ephemeral storage)
+- Files auto-download to your device when ready
+- Re-download from original URL if needed
+- Server cleans up files after 5 minutes
 
 **Age-Restricted Videos**
 - Built-in bypass should work

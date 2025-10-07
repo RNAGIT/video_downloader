@@ -425,12 +425,14 @@ def download_video_task(url, format_choice, download_id):
             file_size_mb = file_size / (1024 * 1024)
             
             if file_size > 0:
+                # Prepare file for immediate download
                 download_progress[download_id].update({
                     'status': 'completed',
                     'progress': 100,
-                    'message': f'Download completed successfully! File: {downloaded_file} ({file_size_mb:.2f} MB)',
+                    'message': f'Download completed! Click to save: {downloaded_file} ({file_size_mb:.2f} MB)',
                     'filename': downloaded_file,
-                    'filepath': file_path
+                    'filepath': file_path,
+                    'ready_for_download': True  # Signal that file is ready
                 })
                 
                 # Add to history with proper title
@@ -451,6 +453,7 @@ def download_video_task(url, format_choice, download_id):
                 download_history.append(history_entry)
                 save_history()
                 print(f"✅ Download completed: {downloaded_file} ({file_size_mb:.2f} MB)")
+                print(f"📁 File ready at: {file_path}")
             else:
                 download_progress[download_id].update({
                     'status': 'error',
@@ -599,12 +602,32 @@ def download_file(filename):
             print(f"✅ Sending file: {filename} ({mime_type})")
             
             # Send file with proper headers for auto-download
-            return send_file(
+            response = send_file(
                 abs_file_path,
                 as_attachment=True,
                 download_name=filename,
                 mimetype=mime_type
             )
+            
+            # Schedule file cleanup after sending (for cloud deployment)
+            # This helps manage storage on platforms with limited disk space
+            try:
+                # Clean up file after 5 minutes to ensure download completes
+                def cleanup_file():
+                    time.sleep(300)  # Wait 5 minutes
+                    try:
+                        if os.path.exists(abs_file_path):
+                            os.remove(abs_file_path)
+                            print(f"🗑️ Cleaned up file: {filename}")
+                    except Exception as e:
+                        print(f"⚠️ Failed to cleanup file {filename}: {e}")
+                
+                cleanup_thread = threading.Thread(target=cleanup_file, daemon=True)
+                cleanup_thread.start()
+            except Exception as e:
+                print(f"⚠️ Cleanup thread error: {e}")
+            
+            return response
         else:
             print(f"❌ File not found: {abs_file_path}")
             return jsonify({
